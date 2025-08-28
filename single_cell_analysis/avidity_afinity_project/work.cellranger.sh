@@ -1,0 +1,4 @@
+cellranger count --id 11thhighavid-5 --fastqs /home/lij36/lij36/02.single_cell/00_fastq/ --sample 11thhighavid-5 --transcriptome /fdb/cellranger/refdata-cellranger-mm10-3.0.0/ --jobmode local --localcores 10 --localmem 80
+cellranger count --id 11thlowavid-5 --fastqs /home/lij36/lij36/02.single_cell/00_fastq/ --sample 11thlowavid-5 --transcriptome /fdb/cellranger/refdata-cellranger-mm10-3.0.0/ --jobmode local --localcores 10 --localmem 80
+cellranger count --id 6thhighavid-5 --fastqs /home/lij36/lij36/02.single_cell/00_fastq/ --sample 6thhighavid-5 --transcriptome /fdb/cellranger/refdata-cellranger-mm10-3.0.0/ --jobmode local --localcores 10 --localmem 80
+cellranger count --id 6thlowavid-5 --fastqs /home/lij36/lij36/02.single_cell/00_fastq/ --sample 6thlowavid-5 --transcriptome /fdb/cellranger/refdata-cellranger-mm10-3.0.0/ --jobmode local --localcores 10 --localmem 80
