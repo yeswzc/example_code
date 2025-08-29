@@ -1,0 +1,141 @@
+---
+title: "cnv_classifier_testDKFZ"
+output: html_document
+date: "2024-11-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r load data}
+cnv <- read.csv("DKFZ.all.cnv.csv.gz", head =T, row.names = 1, check.names = F)
+colnames(cnv) <- gsub("GSM\\d+\\_","",  colnames(cnv))
+cnv <- t(cnv)
+cnv <- cnv[, grep("chrX|chrY", colnames(cnv), invert = T)]
+
+meta <- data.frame(readxl::read_xlsx("DKFZ_41586_2018_BFnature26000_MOESM3_ESM.xlsx", skip = 1), check.names = T)
+
+source("/Users/wuz6/Documents/Project/07.MethylationDiagnosisNO/R/R/cancer_class_color.R")
+
+cnv[1:4,1:4]
+meta[1:4,1:4]
+```
+
+## feature selction for PCA?
+
+```{r sd, echo=FALSE}
+feature.sd <- apply(cnv, 2, sd)
+
+hist(feature.sd, breaks = 300, xlim = c(0, 0.5), probability = T)
+lines(density(feature.sd), lwd = 2)
+```
+
+
+
+```{r pca, echo=FALSE}
+pc <- prcomp(cnv)
+data.subtype <- meta$Reference.Group.abbreviation2[match(rownames(cnv), meta$Sentrix.ID...idat.)]
+
+pc.x <- data.frame(pc$x[,1:20], subtype = data.subtype)
+pc.explained <- round(100*pc$sdev^2/sum(pc$sdev^2), 1)
+pc.explained[1:10]
+
+p1 <- ggplot(pc.x, aes(x = PC1, y = PC2, color = subtype)) +
+  geom_point(show.legend = F, size = .5)+
+  theme_bw()+
+  theme(aspect.ratio = 1, panel.grid = element_blank())+
+  coord_cartesian(expand = F)+
+  scale_color_manual(values = cancer.colour)+
+  labs(x = paste0("PC1 (", pc.explained[1], ")"), y = paste0("PC2 (", pc.explained[2], ")"))
+p2 <- ggplot(pc.x, aes(x = PC3, y = PC4, color = subtype)) +
+  geom_point(show.legend = F, size = .5)+
+  theme_bw()+
+  theme(aspect.ratio = 1, panel.grid = element_blank())+
+  coord_cartesian(expand = F)+
+  scale_color_manual(values = cancer.colour)+
+  labs(x = paste0("PC3 (", pc.explained[3], ")"), y = paste0("PC4 (", pc.explained[4], ")"))
+
+cowplot::plot_grid(p1, p2)
+
+```
+
+
+
+```{r tsne, echo=FALSE}
+r.tsne <- Rtsne::Rtsne(pc$x[,1:80])
+res.tsne <- data.frame(r.tsne$Y, data.subtype)
+colnames(res.tsne) <- c("tsne1", "tsne2", "subtype")
+
+p3 <- ggplot(res.tsne, aes(x = tsne1, y = tsne2, color = subtype)) +
+  geom_point(show.legend = F, size = .5)+
+  theme_bw()+
+  theme(aspect.ratio = 1, panel.grid = element_blank())+
+  coord_cartesian(expand = F)+
+  scale_color_manual(values = cancer.colour)
+p3
+
+```
+
+
+
+```{r  10 fold, echo=FALSE}
+library(e1071)
+source("https://raw.githubusercontent.com/mwsill/mnp_training/refs/heads/master/R/makefolds.R")
+data.subtype1 <- factor(make.names(data.subtype))
+set.seed(123);
+cv.fold <- makefolds(data.subtype1, cv.fold = 10)
+```
+
+```{r svm, echo = FALSE}
+cv.pred.polynomial <- mclapply(cv.fold, function(k.fold){
+    #k.fold = cv.fold[[1]]
+    fit.svm <- svm(x = cnv[k.fold$train,], y = data.subtype1[k.fold$train], kernel = "polynomial")
+    p.svm <- predict(fit.svm, cnv[k.fold$test,])
+    #sum(p.svm == data.subtype1[k.fold$test])
+    p.svm
+}, mc.cores = 10)
+
+cv.pred.linear <- mclapply(cv.fold, function(k.fold){
+    #k.fold = cv.fold[[1]]
+    fit.svm <- svm(x = cnv[k.fold$train,], y = data.subtype1[k.fold$train], kernel = "linear")
+    p.svm <- predict(fit.svm, cnv[k.fold$test,])
+    #sum(p.svm == data.subtype1[k.fold$test])
+    p.svm
+}, mc.cores = 10)
+
+cv.pred.radial <- mclapply(cv.fold, function(k.fold){
+    #k.fold = cv.fold[[1]]
+    fit.svm <- svm(x = cnv[k.fold$train,], y = data.subtype1[k.fold$train], kernel = "radial")
+    p.svm <- predict(fit.svm, cnv[k.fold$test,])
+    #sum(p.svm == data.subtype1[k.fold$test])
+    p.svm
+}, mc.cores = 10)
+
+
+cv.fold.order <- lapply(cv.fold, function(x){ x$test})
+
+n.test <- length(unlist(unlist(cv.fold.order)))
+100*sum(unlist(cv.pred.radial) == data.subtype1[unlist(cv.fold.order)])/n.test     ###59.80
+100*sum(unlist(cv.pred.polynomial) == data.subtype1[unlist(cv.fold.order)])/n.test ###26.95
+100*sum(unlist(cv.pred.linear) == data.subtype1[unlist(cv.fold.order)])/n.test     ###79.97
+
+```
+
+```{r RF 10 fold, echo=FALSE}
+library(randomForest)
+cv.pred.rf <- mclapply(cv.fold, function(k.fold){
+    #k.fold = cv.fold[[1]]
+    fit.rf <- randomForest(x = cnv[k.fold$train,], y = data.subtype1[k.fold$train], ntree = 1000)
+    p.rf <- predict(fit.svm, cnv[k.fold$test,])
+    #sum(p.svm == data.subtype1[k.fold$test])
+    p.rf
+}, mc.cores = 10)
+
+100*sum(unlist(cv.pred.rf) == data.subtype1[unlist(cv.fold.order)])/n.test  #46.20
+```
+
+
+
